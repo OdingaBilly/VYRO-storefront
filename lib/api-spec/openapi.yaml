@@ -3,13 +3,17 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: VYRO product catalogue and secure catalogue administration API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: catalogue
+    description: Public product catalogue
+  - name: administration
+    description: Authenticated catalogue management
 paths:
   /healthz:
     get:
@@ -24,13 +28,681 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /categories:
+    get:
+      operationId: listCategories
+      tags: [catalogue]
+      summary: List active product categories
+      responses:
+        "200":
+          description: Active categories
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Category"
+  /products:
+    get:
+      operationId: listProducts
+      tags: [catalogue]
+      summary: Search and browse published products
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+            maxLength: 120
+        - name: category
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+        - name: sort
+          in: query
+          schema:
+            type: string
+            enum: [newest, name, price-asc, price-desc]
+            default: newest
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 48
+            default: 12
+        - name: featured
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Matching published products
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProductSearchResult"
+  /products/{slug}:
+    get:
+      operationId: getProduct
+      tags: [catalogue]
+      summary: Get a published product by slug
+      parameters:
+        - name: slug
+          in: path
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 160
+      responses:
+        "200":
+          description: Product details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Product"
+        "404":
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /admin/summary:
+    get:
+      operationId: getAdminSummary
+      tags: [administration]
+      summary: Get catalogue operations summary
+      security:
+        - ClerkSession: []
+      responses:
+        "200":
+          description: Product counts from the authoritative catalogue
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminSummary"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /admin/products:
+    get:
+      operationId: listAdminProducts
+      tags: [administration]
+      summary: List all products for catalogue management
+      security:
+        - ClerkSession: []
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+            maxLength: 120
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [draft, published, archived]
+      responses:
+        "200":
+          description: Products and variants visible to administrators
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AdminProduct"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      operationId: createProduct
+      tags: [administration]
+      summary: Create a catalogue product
+      security:
+        - ClerkSession: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductInput"
+      responses:
+        "201":
+          description: Product created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminProduct"
+        "400":
+          description: Invalid product data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Slug or SKU already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /admin/products/{productId}:
+    patch:
+      operationId: updateProduct
+      tags: [administration]
+      summary: Update an existing catalogue product
+      security:
+        - ClerkSession: []
+      parameters:
+        - name: productId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProductUpdate"
+      responses:
+        "200":
+          description: Product updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminProduct"
+        "400":
+          description: Invalid product data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Sign-in required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Administrator access required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: Product not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Slug or SKU already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 components:
+  securitySchemes:
+    ClerkSession:
+      type: apiKey
+      in: cookie
+      name: __session
   schemas:
     HealthStatus:
       type: object
       properties:
         status:
           type: string
+      required: [status]
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    Category:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: [string, "null"]
+        imagePath:
+          type: [string, "null"]
+        sortOrder:
+          type: integer
+      required: [id, name, slug, description, imagePath, sortOrder]
+    ProductImage:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        path:
+          type: string
+        altText:
+          type: string
+        sortOrder:
+          type: integer
+        isPrimary:
+          type: boolean
+      required: [id, path, altText, sortOrder, isPrimary]
+    ProductVariant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        name:
+          type: string
+        options:
+          type: object
+          additionalProperties:
+            type: string
+        priceMinor:
+          type: integer
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        compareAtPriceMinor:
+          type: [integer, "null"]
+        available:
+          type: boolean
       required:
+        - id
+        - sku
+        - name
+        - options
+        - priceMinor
+        - currency
+        - compareAtPriceMinor
+        - available
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        shortDescription:
+          type: [string, "null"]
+        description:
+          type: [string, "null"]
+        brand:
+          type: [string, "null"]
+        featured:
+          type: boolean
+        category:
+          anyOf:
+            - $ref: "#/components/schemas/Category"
+            - type: "null"
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductImage"
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductVariant"
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - slug
+        - shortDescription
+        - description
+        - brand
+        - featured
+        - category
+        - images
+        - variants
+        - createdAt
+    ProductSummary:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        slug:
+          type: string
+        shortDescription:
+          type: [string, "null"]
+        categoryName:
+          type: [string, "null"]
+        featured:
+          type: boolean
+        primaryImage:
+          $ref: "#/components/schemas/ProductImage"
+        priceMinor:
+          type: integer
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        available:
+          type: boolean
+      required:
+        - id
+        - name
+        - slug
+        - shortDescription
+        - categoryName
+        - featured
+        - primaryImage
+        - priceMinor
+        - currency
+        - available
+    ProductSearchResult:
+      type: object
+      properties:
+        products:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductSummary"
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+        pageSize:
+          type: integer
+          minimum: 1
+      required: [products, total, page, pageSize]
+    AdminVariant:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        sku:
+          type: string
+        name:
+          type: string
+        options:
+          type: object
+          additionalProperties:
+            type: string
+        priceMinor:
+          type: integer
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        compareAtPriceMinor:
+          type: [integer, "null"]
+        stockOnHand:
+          type: integer
+          minimum: 0
+        reserved:
+          type: integer
+          minimum: 0
+      required:
+        - id
+        - sku
+        - name
+        - options
+        - priceMinor
+        - currency
+        - compareAtPriceMinor
+        - stockOnHand
+        - reserved
+    AdminProduct:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        categoryId:
+          type: [string, "null"]
+          format: uuid
+        categoryName:
+          type: [string, "null"]
+        name:
+          type: string
+        slug:
+          type: string
+        shortDescription:
+          type: [string, "null"]
+        description:
+          type: [string, "null"]
+        status:
+          type: string
+          enum: [draft, published, archived]
+        brand:
+          type: [string, "null"]
+        featured:
+          type: boolean
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductImage"
+        variants:
+          type: array
+          items:
+            $ref: "#/components/schemas/AdminVariant"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - categoryId
+        - categoryName
+        - name
+        - slug
+        - shortDescription
+        - description
         - status
-
+        - brand
+        - featured
+        - images
+        - variants
+        - createdAt
+        - updatedAt
+    VariantInput:
+      type: object
+      properties:
+        sku:
+          type: string
+          minLength: 1
+          maxLength: 100
+        name:
+          type: string
+          minLength: 1
+          maxLength: 160
+        options:
+          type: object
+          additionalProperties:
+            type: string
+        priceMinor:
+          type: integer
+          minimum: 0
+        currency:
+          type: string
+          minLength: 3
+          maxLength: 3
+        compareAtPriceMinor:
+          type: [integer, "null"]
+          minimum: 0
+        stockOnHand:
+          type: integer
+          minimum: 0
+      required: [sku, name, options, priceMinor, currency, compareAtPriceMinor, stockOnHand]
+    ProductImageInput:
+      type: object
+      properties:
+        path:
+          type: string
+          minLength: 1
+          maxLength: 500
+        altText:
+          type: string
+          maxLength: 300
+        sortOrder:
+          type: integer
+          minimum: 0
+        isPrimary:
+          type: boolean
+      required: [path, altText, sortOrder, isPrimary]
+    ProductInput:
+      type: object
+      properties:
+        categoryId:
+          type: [string, "null"]
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        slug:
+          type: string
+          minLength: 1
+          maxLength: 160
+        shortDescription:
+          type: [string, "null"]
+          maxLength: 280
+        description:
+          type: [string, "null"]
+        status:
+          type: string
+          enum: [draft, published, archived]
+        brand:
+          type: [string, "null"]
+          maxLength: 120
+        featured:
+          type: boolean
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductImageInput"
+        variants:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/VariantInput"
+      required:
+        - name
+        - slug
+        - status
+        - featured
+        - images
+        - variants
+    ProductUpdate:
+      type: object
+      properties:
+        categoryId:
+          type: [string, "null"]
+          format: uuid
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        slug:
+          type: string
+          minLength: 1
+          maxLength: 160
+        shortDescription:
+          type: [string, "null"]
+          maxLength: 280
+        description:
+          type: [string, "null"]
+        status:
+          type: string
+          enum: [draft, published, archived]
+        brand:
+          type: [string, "null"]
+          maxLength: 120
+        featured:
+          type: boolean
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProductImageInput"
+        variants:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/VariantInput"
+    AdminSummary:
+      type: object
+      properties:
+        totalProducts:
+          type: integer
+          minimum: 0
+        publishedProducts:
+          type: integer
+          minimum: 0
+        draftProducts:
+          type: integer
+          minimum: 0
+        archivedProducts:
+          type: integer
+          minimum: 0
+        outOfStockVariants:
+          type: integer
+          minimum: 0
+      required:
+        - totalProducts
+        - publishedProducts
+        - draftProducts
+        - archivedProducts
+        - outOfStockVariants
